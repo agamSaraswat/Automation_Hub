@@ -1,4 +1,4 @@
-# Agam Automation Hub
+# Automation Hub
 
 A fully local, Python-powered personal automation system that handles daily job searching, LinkedIn content creation, Gmail triage, and morning briefings — all orchestrated through a Telegram bot and a unified CLI. Built for a Data Scientist's workflow with Claude AI at the core, every outward-facing action (posting, emailing, applying) has a human-in-the-loop gate so nothing fires without explicit approval.
 
