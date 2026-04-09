@@ -1,0 +1,133 @@
+# ════════════════════════════════════════════════════════════════
+# Agam Saraswat — User Profile
+# ════════════════════════════════════════════════════════════════
+
+name: "Agam Saraswat"
+email: "saraswatagam012@gmail.com"
+phone: "+1 (508) 373-4260"
+location: "Massachusetts, USA"
+
+# LinkedIn profile for content generation
+linkedin_profile: "https://linkedin.com/in/agamsaraswat"
+github_profile: "https://github.com/agamsaraswat"
+
+# Path to master resume (from repo root)
+master_resume_path: "master_resume/agam_master_resume.md"
+
+# ── Job Search Preferences ──────────────────────────────────
+
+job_preferences:
+  # Target job titles
+  target_roles:
+    - "Senior Data Scientist"
+    - "Lead Data Scientist"
+    - "Applied AI Engineer"
+    - "ML Platform Engineer"
+    - "Staff Data Scientist"
+    - "Healthcare ML Engineer"
+    - "NLP Engineer"
+
+  # Keywords to prioritize in job descriptions
+  target_keywords:
+    - "machine learning"
+    - "Python"
+    - "production systems"
+    - "PostgreSQL"
+    - "FastAPI"
+    - "healthcare"
+    - "predictive analytics"
+    - "NLP"
+    - "data pipeline"
+
+  # Keywords that trigger automatic rejection
+  exclude_keywords:
+    - "React"
+    - "frontend"
+    - "DevOps"
+    - "C++"
+    - "legacy code"
+    - "junior"
+    - "entry level"
+    - "intern"
+    - "sales"
+
+  # Preferred job locations
+  locations:
+    - "Remote"
+    - "United States"
+    - "Boston"
+    - "New York"
+    - "San Francisco"
+    - "Singapore"
+
+  # Compensation expectations
+  salary_min_usd: 120000
+  salary_max_usd: 200000
+  equity_important: true
+
+# ── LinkedIn Content Preferences ───────────────────────────
+
+linkedin_content:
+  # Posting frequency (per week)
+  post_frequency_per_week: 2.5
+
+  # Preferred content angles
+  content_themes:
+    - "Data Science & ML"
+    - "Healthcare AI"
+    - "Production Systems"
+    - "Career Growth"
+    - "Learning"
+
+  # Target audience
+  target_audience: ["Data Scientists", "ML Engineers", "CTOs", "Healthcare Tech"]
+
+  # Posting time window (EST)
+  post_time_start_hour: 8
+  post_time_end_hour: 11
+
+# ── Email & Communication ───────────────────────────────────
+
+email_preferences:
+  # Gmail triage urgency keywords
+  urgency_keywords:
+    - "urgent"
+    - "asap"
+    - "immediately"
+    - "boss"
+    - "cto"
+    - "founder"
+
+  # Email addresses to flag as urgent
+  urgent_senders:
+    - "boss@company.com"
+    - "founder@company.com"
+
+# ── Automation Preferences ──────────────────────────────────
+
+automation:
+  # Daily job discovery limit
+  daily_job_limit: 10
+
+  # Resume tailoring: auto-tailor all discovered jobs?
+  auto_tailor_resumes: true
+
+  # LinkedIn: auto-publish approved posts?
+  auto_publish_linkedin: false
+
+  # Gmail: auto-send replies?
+  auto_send_gmail: false
+
+  # Briefing: include job stats?
+  briefing_include_jobs: true
+
+  # Briefing: include email summary?
+  briefing_include_email: true
+
+# ── Profile Metadata ───────────────────────────────────────
+
+metadata:
+  created_at: "2026-03-15T10:00:00Z"
+  updated_at: "2026-04-09T14:30:00Z"
+  description: "Agam's original profile for job search automation"
+  version: "1.0"

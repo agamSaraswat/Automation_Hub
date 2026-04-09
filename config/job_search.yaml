@@ -1,0 +1,137 @@
+# ════════════════════════════════════════
+# Job Search Configuration — Phase 1
+# Claude-powered discovery + Adversarial Harness
+# ════════════════════════════════════════
+
+# ── Job Discovery (Claude web search agent) ──────────────────────
+
+job_discovery:
+  enabled: true
+  strategy: "web_search"  # Claude agent searches web
+  search_freshness: "daily"  # Run once per 24h
+  
+  # Target roles for discovery
+  target_roles:
+    - "Senior Data Scientist"
+    - "Lead Data Scientist"
+    - "Applied AI Engineer"
+    - "ML Platform Engineer"
+    - "Staff Data Scientist"
+    - "Healthcare ML Engineer"
+    - "NLP Engineer"
+  
+  # Keywords to prioritize in discovery
+  target_keywords:
+    - "machine learning"
+    - "Python"
+    - "production systems"
+    - "PostgreSQL"
+    - "FastAPI"
+    - "healthcare"
+    - "predictive analytics"
+    - "NLP"
+    - "data pipeline"
+  
+  # Keywords that trigger hard reject
+  exclude_keywords:
+    - "React"
+    - "frontend"
+    - "DevOps"
+    - "C++"
+    - "legacy code"
+    - "junior"
+    - "entry level"
+    - "intern"
+    - "sales"
+  
+  # Preferred locations
+  locations:
+    - "Remote"
+    - "United States"
+    - "Boston"
+    - "New York"
+    - "San Francisco"
+    - "Singapore"
+  
+  # Daily limit
+  daily_limit: 10
+
+# ── Legacy scrapers (deprecated) ───────────────────────────────
+
+sources:
+  remoteok:
+    enabled: false  # Replaced by Claude web search
+    url: "https://remoteok.com/api"
+  
+  himalayas:
+    enabled: false  # Replaced by Claude web search
+    url: "https://himalayas.app/jobs/api"
+  
+  indeed_rss:
+    enabled: false  # Replaced by Claude web search
+    base_url: "https://www.indeed.com/rss"
+
+# ── Resume Tailoring Configuration ─────────────────────────────
+
+resume_tailoring:
+  enabled: true
+  harness_mode: "adversarial"  # Planner → Generator → Evaluator
+  evaluator_strictness: "high"  # Flag any untraced claims
+  master_resume_path: "master_resume/agam_master_resume.md"
+  output_format: "markdown"  # markdown or pdf
+  max_tailored_length: 2500  # characters
+
+# ── LinkedIn Content Configuration ────────────────────────────
+
+linkedin_content:
+  enabled: true
+  harness_mode: "adversarial"
+  auto_publish: false  # Always require human approval
+  content_calendar:
+    - "Job search automation"
+    - "Building with Claude"
+    - "Learning systems design"
+  target_audience: ["CTOs", "ML Engineers", "Founders", "Data Scientists"]
+  posting_hours: [8, 11]  # EST
+  post_frequency: "2–3 per week"
+
+# ── Gmail Triage Configuration ────────────────────────────────
+
+gmail_triage:
+  enabled: true
+  structured_output: true  # Use v2 with complete_json()
+  classification_strictness: "high"  # Avoid false urgency
+  keywords_urgent:
+    - "urgent"
+    - "asap"
+    - "immediately"
+    - "boss"
+    - "cto"
+    - "founder"
+  keywords_ignore:
+    - "unsubscribe"
+    - "promotions"
+    - "marketing"
+
+# ── Legacy filters (kept for backward compatibility) ──────────
+
+filters:
+  min_experience_years: 3
+  max_experience_years: 10
+  include_keywords:
+    - "data scientist"
+    - "machine learning"
+    - "nlp"
+  exclude_keywords:
+    - "sales"
+    - "frontend"
+  include_titles:
+    - "senior data scientist"
+    - "lead data scientist"
+  exclude_titles:
+    - "intern"
+    - "junior"
+  preferred_locations:
+    - "remote"
+  remote_preference: true
+  minimum_match_threshold: 35

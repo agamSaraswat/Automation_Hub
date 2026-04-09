@@ -1,0 +1,164 @@
+# ════════════════════════════════════════════════════════════════
+# Soumyabrata Ghosh — User Profile
+# ════════════════════════════════════════════════════════════════
+
+name: "Soumyabrata Ghosh"
+email: "soumyabrata@readlepress.in"
+phone: "+1 (978) 555-XXXX"  # TODO: Update
+location: "Worcester, MA, USA"
+
+# LinkedIn profile for content generation
+linkedin_profile: "https://linkedin.com/in/soumyabrata"  # TODO: Update
+github_profile: "https://github.com/soumyabrata"  # TODO: Update
+
+# Path to master resume (from repo root)
+# TODO: Create your master resume or update path if different
+master_resume_path: "master_resume/soumyabrata_master_resume.md"
+
+# ── Job Search Preferences ──────────────────────────────────
+
+job_preferences:
+  # Target job titles
+  # Note: You're looking for CTO/Co-founder/Principal Engineer roles in AI/systems
+  target_roles:
+    - "CTO"
+    - "Co-founder"
+    - "Principal Engineer"
+    - "Head of Engineering"
+    - "VP Engineering"
+    - "Chief AI Officer"
+    - "Founding Engineer"
+    - "AI Platform Lead"
+
+  # Keywords to prioritize
+  target_keywords:
+    - "AI"
+    - "Claude"
+    - "machine learning"
+    - "Python"
+    - "TypeScript"
+    - "systems design"
+    - "product"
+    - "founding"
+    - "infrastructure"
+    - "education"
+
+  # Keywords that trigger rejection
+  exclude_keywords:
+    - "junior"
+    - "entry level"
+    - "intern"
+    - "sales"
+    - "support"
+    - "contract"  # You're looking for permanent founder roles
+
+  # Preferred locations
+  locations:
+    - "Remote"
+    - "Boston"
+    - "San Francisco"
+    - "New York"
+    - "Singapore"
+    - "London"
+
+  # Compensation expectations
+  # (Note: As founder/CTO, this is less relevant — equity is key)
+  salary_min_usd: 150000
+  salary_max_usd: 300000
+  equity_important: true
+  equity_min_percent: 0.5
+
+# ── LinkedIn Content Preferences ───────────────────────────
+
+linkedin_content:
+  # Posting frequency (per week)
+  post_frequency_per_week: 2
+
+  # Preferred content angles
+  # (Match your global-first, interdisciplinary positioning)
+  content_themes:
+    - "AI Systems & Product"
+    - "Building with Claude"
+    - "Education & Learning Systems"
+    - "Founding & Scaling"
+    - "Global Tech"
+    - "Career Strategy"
+
+  # Target audience
+  target_audience: ["CTOs", "Founders", "VPs Engineering", "AI Leaders", "Educators"]
+
+  # Posting time window (EST)
+  post_time_start_hour: 9
+  post_time_end_hour: 11
+
+# ── Email & Communication ───────────────────────────────────
+
+email_preferences:
+  # Gmail triage urgency keywords
+  urgency_keywords:
+    - "urgent"
+    - "asap"
+    - "funding"
+    - "board"
+    - "deal"
+    - "visa"  # (Immigration-related)
+    - "rfe"   # (I-539 RFE)
+
+  # Email addresses to flag as urgent
+  urgent_senders:
+    - "sanjoy@readlepress.in"  # CEO
+    - "subhojit@readlepress.in"  # COO
+    - "uscis@dhs.gov"  # Immigration
+    - "admissions@umassd.edu"  # PhD applications
+
+# ── Automation Preferences ──────────────────────────────────
+
+automation:
+  # Daily job discovery limit
+  daily_job_limit: 15  # Higher for founder search
+
+  # Resume tailoring: auto-tailor all discovered jobs?
+  auto_tailor_resumes: true
+
+  # LinkedIn: auto-publish approved posts?
+  auto_publish_linkedin: false
+
+  # Gmail: auto-send replies?
+  auto_send_gmail: false
+
+  # Briefing: include job stats?
+  briefing_include_jobs: true
+
+  # Briefing: include email summary?
+  briefing_include_email: true
+
+  # Briefing: include project status?
+  briefing_include_projects: true
+
+# ── Project Tracking (Optional) ─────────────────────────────
+
+projects:
+  - name: "ReadlePress HPC OS"
+    status: "deployment"
+    next_milestone: "Railway Hobby upgrade + api.readlepress.in custom domain"
+
+  - name: "AKTIVIQ"
+    status: "architecture"
+    next_milestone: "Phase 2 outreach pipeline + NetMap integration"
+
+  - name: "PhD Applications"
+    status: "pending"
+    deadline: "2026-04-15"
+
+# ── Profile Metadata ───────────────────────────────────────
+
+metadata:
+  created_at: "2026-04-09T14:30:00Z"
+  updated_at: "2026-04-09T14:30:00Z"
+  description: "Soumyabrata's profile for global job search + AKTIVIQ development"
+  version: "1.0"
+  notes: |
+    Global-first, borderless positioning.
+    Interdisciplinary focus: education, AI, business, design, policy.
+    Looking for co-founder opportunities or CTO roles.
+    Active in multiple parallel projects (ReadlePress, AKTIVIQ, PhD).
