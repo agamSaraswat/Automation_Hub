@@ -25,9 +25,7 @@ from telegram.ext import (
 )
 
 from src.agent.claude_client import ClaudeClient
-from src.config.profile_manager import ProfileManager
-from pathlib import Path
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+from src.config.profile_manager import load_profile
 from src.agent.tools import TOOL_SCHEMAS, dispatch_tool
 from src.jobs.deduplicator import get_stats, init_db
 
@@ -37,8 +35,7 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 ALLOWED_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
-_PM = ProfileManager(_REPO_ROOT / "config")
-_PROFILE = _PM.load_active_profile()
+_PROFILE = load_profile()
 _USER_NAME = _PROFILE.get("name", "the user").split()[0]
 
 AGENT_SYSTEM_PROMPT = f"""You are {_USER_NAME}'s personal AI assistant, running on their local automation hub.

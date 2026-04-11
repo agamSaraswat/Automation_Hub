@@ -45,20 +45,20 @@ def _run_morning_briefing() -> None:
 def _run_job_pipeline() -> None:
     logger.info("⏰ Running job pipeline...")
     try:
-        from src.jobs.scraper import run_scraper
-        from src.jobs.tailoring_engine import run_tailoring
+        from src.services.automation import run_jobs_pipeline
         from src.messaging.telegram_bot import send_message_sync
 
-        new_count = run_scraper()
-        tailored_count = run_tailoring()
+        result = run_jobs_pipeline()
+        new_count = result.get("scraped_new_jobs", 0)
+        tailored_count = result.get("tailored_jobs", 0)
         msg = (
             f"📋 Job Pipeline Complete\n"
-            f"• {new_count} new jobs scraped\n"
+            f"• {new_count} new jobs discovered\n"
             f"• {tailored_count} applications tailored\n"
-            f"Check output/jobs/{date.today().isoformat()}/"
+            f"Queue today: {result.get('queue_size_today', 0)}"
         )
         send_message_sync(msg)
-        logger.info("Job pipeline: %d scraped, %d tailored", new_count, tailored_count)
+        logger.info("Job pipeline: %d discovered, %d tailored", new_count, tailored_count)
     except Exception as exc:
         logger.error("Job pipeline failed: %s", exc)
 

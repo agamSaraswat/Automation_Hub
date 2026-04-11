@@ -36,6 +36,7 @@ class ClaudeClient:
         self.model = model
         self.max_tokens = max_tokens
         self.temperature = temperature
+        self._last_usage: anthropic.types.Usage | None = None
         logger.info("ClaudeClient initialised with model=%s", self.model)
 
     # ── Simple completion ──────────────────────────────────────
@@ -59,6 +60,7 @@ class ClaudeClient:
                 messages=[{"role": "user", "content": prompt}],
             )
             text = message.content[0].text
+            self._last_usage = message.usage
             logger.debug(
                 "Completion: %d input tokens, %d output tokens",
                 message.usage.input_tokens,
@@ -203,6 +205,13 @@ class ClaudeClient:
             cleaned = cleaned.rsplit("```", 1)[0]
         cleaned = cleaned.strip()
         return json.loads(cleaned)
+
+    # ── Token tracking ─────────────────────────────────────────
+    def last_token_count(self) -> int:
+        """Return total tokens (input + output) used by the most recent complete() call."""
+        if self._last_usage is None:
+            return 0
+        return self._last_usage.input_tokens + self._last_usage.output_tokens
 
 
 if __name__ == "__main__":

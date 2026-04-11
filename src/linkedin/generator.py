@@ -12,7 +12,7 @@ from pathlib import Path
 import yaml
 
 from src.agent.claude_client import ClaudeClient
-from src.config.profile_manager import ProfileManager
+from src.config.profile_manager import load_profile
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +75,7 @@ def generate_post(pillar_override: dict | None = None) -> str:
     if "Weekend" in name:
         return f"[Weekend] Consider resharing a past post or engaging with your network."
 
+    profile = load_profile()
     prompt = f"""Write a LinkedIn post for today's content pillar.
 
 PILLAR: {name}
@@ -85,16 +86,13 @@ TONE GUIDELINES:
 {tone}
 
 {chr(10).join(f"- {line}" for line in profile.get("linkedin_context", [
-    f"Currently {profile.get(\'current_role\', \'Data Scientist\')} at {profile.get(\'current_company\', \'their company\')}",
+    "Currently " + profile.get("current_role", "Data Scientist") + " at " + profile.get("current_company", "their company") + "",
     "Experienced data professional with measurable business impact"
 ]))}
 
 Write the complete post now. Make it feel authentic and specific — not generic.
 Vary the structure from typical posts. Be creative with the hook.
 """
-
-    pm = ProfileManager(REPO_ROOT / "config")
-    profile = pm.load_active_profile()
     system_prompt = _build_system_prompt(profile)
     client = ClaudeClient()
     post = client.complete(prompt, system=system_prompt, temperature=0.8)

@@ -20,7 +20,7 @@ from typing import Any
 import yaml
 
 from src.agent.claude_client import ClaudeClient
-from src.jobs.deduplicator import init_db, add_job, count_todays_jobs, check_duplicate
+from src.jobs.deduplicator import init_db, add_job, count_todays_jobs, is_seen
 from src.jobs.harness import PlannerGeneratorEvaluator, SprintContract
 
 logger = logging.getLogger(__name__)
@@ -253,57 +253,65 @@ def _execute_searches(
     discovery_cfg: dict[str, Any],
 ) -> dict[str, Any]:
     """
-    Generator phase: execute web searches.
-    
-    NOTE: In production, this would call web_search via Anthropic API.
-    For now, returns mock data.
+    Generator phase: execute real web searches via Anthropic web_search tool.
+
+    Uses the server-side web_search_20250305 tool — Anthropic executes the
+    search, Claude receives the results and returns structured job data.
+    No client-side tool routing needed.
     """
     client = ClaudeClient()
     raw_jobs = []
+    web_search_tool = {"type": "web_search_20250305", "name": "web_search"}
 
-    # For each query, call web_search and parse results
     for query in queries[:4]:  # Limit to first 4 to control token usage
-        logger.info(f"Searching: {query}")
+        logger.info("Searching: %s", query)
         try:
-            # Use Claude to search the web
-            # This is a simplified mock — in production, use actual web_search
-            prompt = f"""
-Search the web for jobs matching: "{query}"
+            prompt = (
+                f'Use web_search to find current job postings for: "{query}"\n\n'
+                "Search for real, active listings. For each job found, extract:\n"
+                "- title: exact job title\n"
+                "- company: company name\n"
+                "- url: direct link to the job posting\n"
+                "- location: job location or \"Remote\"\n"
+                "- jd_snippet: first 200 characters of the job description\n\n"
+                "Return ONLY a JSON object with no other text:\n"
+                '{\n  "jobs": [\n'
+                '    {"title": "...", "company": "...", "url": "...", "location": "...", "jd_snippet": "..."}\n'
+                "  ]\n}"
+            )
 
-Find the top 3 most relevant job postings.
-For each job, extract:
-- title
-- company
-- url
-- location
-- job_description_snippet
+            message = client.complete_with_tools(
+                prompt=prompt,
+                tools=[web_search_tool],
+                temperature=0.1,
+            )
 
-Respond with JSON:
-{{
-  "jobs": [
-    {{"title": "...", "company": "...", "url": "...", "location": "...", "jd_snippet": "..."}},
-    ...
-  ]
-}}
+            # Extract text blocks — web_search is server-side so the final
+            # response contains real results already synthesised by Claude.
+            text = "\n".join(
+                block.text
+                for block in message.content
+                if hasattr(block, "text") and block.type == "text"
+            ).strip()
 
-Focus on real, verifiable jobs. Include company name and direct job URL.
-"""
-            response = client.complete(prompt, temperature=0.1)
-            response = response.strip()
-            if response.startswith("```json"):
-                response = response[7:]
-            if response.endswith("```"):
-                response = response[:-3]
+            # Strip markdown fences if present
+            if "```json" in text:
+                text = text.split("```json", 1)[1].split("```")[0]
+            elif text.startswith("```"):
+                text = text.split("\n", 1)[1].rsplit("```", 1)[0]
 
-            search_result = json.loads(response.strip())
+            search_result = json.loads(text.strip())
             for job in search_result.get("jobs", []):
                 job["source"] = "web_search"
                 job["query"] = query
                 raw_jobs.append(job)
-        except Exception as exc:
-            logger.warning(f"Search query failed [{query}]: {exc}")
 
-    logger.info(f"Generator collected {len(raw_jobs)} raw jobs")
+        except json.JSONDecodeError as exc:
+            logger.warning("JSON parse error for query [%s]: %s", query, exc)
+        except Exception as exc:
+            logger.warning("Search query failed [%s]: %s", query, exc)
+
+    logger.info("Generator collected %d raw jobs", len(raw_jobs))
     return {"raw_jobs": raw_jobs, "tokens_used": 0}
 
 
@@ -419,7 +427,7 @@ def _dedup_jobs(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 seen_urls.add(url)
                 deduped.append(job)
                 # Check if already in DB
-                if not check_duplicate(url):
+                if not is_seen(url):
                     logger.info(f"New job found: {job.get('title')} @ {job.get('company')}")
                 else:
                     logger.info(f"Duplicate in DB: {url}")

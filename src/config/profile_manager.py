@@ -47,7 +47,17 @@ def get_profiles_dir() -> Path:
 
 
 def get_active_profile_name() -> str:
-    """Get currently active profile name (default: agam)."""
+    """Get currently active profile name.
+
+    Priority order:
+      1. ACTIVE_USER environment variable
+      2. config/active_profile.txt
+      3. Hard default: agam
+    """
+    env_user = os.getenv("ACTIVE_USER", "").strip()
+    if env_user:
+        return env_user
+
     try:
         if ACTIVE_PROFILE_FILE.exists():
             with open(ACTIVE_PROFILE_FILE, "r", encoding="utf-8") as f:

@@ -118,12 +118,10 @@ def run_jobs_pipeline() -> dict[str, Any]:
         if not discovered_jobs:
             logger.info("[jobs_pipeline] No jobs discovered")
             return {
-                "discovered_jobs": 0,
-                "queued_jobs": 0,
+                "scraped_new_jobs": 0,
                 "tailored_jobs": 0,
                 "queue_size_today": len(get_todays_queue()),
                 "stats": get_stats(),
-                "errors": discovery_result.get("errors", []),
             }
 
         # Phase 2: Queue jobs (with human gate)
@@ -164,24 +162,20 @@ def run_jobs_pipeline() -> dict[str, Any]:
         finalize_instrumentation(format="json")
 
         return {
-            "discovered_jobs": len(discovered_jobs),
-            "queued_jobs": queued_count,
+            "scraped_new_jobs": len(discovered_jobs),
             "tailored_jobs": tailored_count,
             "queue_size_today": len(get_todays_queue()),
             "stats": get_stats(),
-            "errors": tailoring_errors,
         }
 
     except Exception as exc:
         logger.error(f"[jobs_pipeline] Pipeline error: {exc}", exc_info=True)
         finalize_instrumentation(format="json")
         return {
-            "discovered_jobs": 0,
-            "queued_jobs": 0,
+            "scraped_new_jobs": 0,
             "tailored_jobs": 0,
             "queue_size_today": len(get_todays_queue()),
             "stats": get_stats(),
-            "errors": [str(exc)],
         }
 
 

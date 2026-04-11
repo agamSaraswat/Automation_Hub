@@ -16,7 +16,7 @@ from pathlib import Path
 import yaml
 
 from src.agent.claude_client import ClaudeClient
-from src.config.profile_manager import ProfileManager
+from src.config.profile_manager import load_profile
 from src.jobs.deduplicator import get_todays_queue, update_status
 
 logger = logging.getLogger(__name__)
@@ -27,8 +27,7 @@ OUTPUT_BASE = REPO_ROOT / "output" / "jobs"
 
 def _get_profile():
     """Load the active user profile."""
-    pm = ProfileManager(REPO_ROOT / "config")
-    return pm.load_active_profile()
+    return load_profile()
 
 def _get_master_resume_path():
     """Get master resume path from active profile."""

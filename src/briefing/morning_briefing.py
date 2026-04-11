@@ -18,7 +18,7 @@ import feedparser
 import yaml
 
 from src.agent.claude_client import ClaudeClient
-from src.config.profile_manager import ProfileManager
+from src.config.profile_manager import load_profile
 from src.jobs.deduplicator import init_db, get_stats, get_todays_queue
 
 logger = logging.getLogger(__name__)
@@ -96,8 +96,7 @@ def generate_briefing() -> str:
     Returns formatted text suitable for Telegram.
     """
     init_db()
-    pm = ProfileManager(REPO_ROOT / "config")
-    profile = pm.load_active_profile()
+    profile = load_profile()
     user_name = profile.get("name", "User").split()[0]  # First name
     settings = _load_settings()
     today = date.today().isoformat()

@@ -13,20 +13,28 @@ from pathlib import Path
 from typing import Any, Optional
 
 from src.agent.claude_client import ClaudeClient
+from src.config.profile_manager import load_profile
 from src.jobs.harness import PlannerGeneratorEvaluator, SprintContract
 
 logger = logging.getLogger(__name__)
 
-MASTER_RESUME_PATH = Path(__file__).resolve().parent.parent.parent / "master_resume" / "agam_master_resume.md"
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def load_master_resume() -> str:
-    """Load the master resume."""
+    """Load the master resume from the path specified in the active profile."""
+    profile = load_profile()
+    resume_path_str = profile.get("master_resume_path", "")
+    if not resume_path_str:
+        raise FileNotFoundError("master_resume_path is not set in the active profile")
+    resume_path = Path(resume_path_str)
+    if not resume_path.is_absolute():
+        resume_path = REPO_ROOT / resume_path
     try:
-        with open(MASTER_RESUME_PATH, "r", encoding="utf-8") as f:
+        with open(resume_path, "r", encoding="utf-8") as f:
             return f.read()
     except FileNotFoundError:
-        logger.error(f"Master resume not found: {MASTER_RESUME_PATH}")
+        logger.error("Master resume not found: %s", resume_path)
         raise
 
 
