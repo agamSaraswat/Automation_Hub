@@ -13,15 +13,15 @@ Flow:
 import json
 import logging
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
 
 from src.agent.claude_client import ClaudeClient
+from src.jobs.application_tracker import get_feedback_signal
 from src.jobs.deduplicator import init_db, add_job, count_todays_jobs, is_seen
-from src.jobs.harness import PlannerGeneratorEvaluator, SprintContract
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,6 @@ def run_job_discovery() -> dict[str, Any]:
       - errors: any issues encountered
     """
     init_db()
-    config = load_config()
     discovery_cfg = get_discovery_config()
 
     if not discovery_cfg.get("enabled", True):
@@ -91,16 +90,6 @@ def run_job_discovery() -> dict[str, Any]:
             "errors": ["Daily limit reached"],
         }
 
-    # Build harness contract
-    contract = SprintContract(
-        name="job_discovery",
-        required_fields=["jobs", "run_metadata"],
-        max_iterations=2,
-        evaluator_strictness="high",
-    )
-
-    harness = PlannerGeneratorEvaluator(contract)
-
     # Prepare context for harness
     context = {
         "target_roles": discovery_cfg.get("target_roles", []),
@@ -110,37 +99,8 @@ def run_job_discovery() -> dict[str, Any]:
         "daily_limit": daily_limit,
         "current_queue_count": current_count,
         "remaining_slots": daily_limit - current_count,
+        "feedback_signal": get_feedback_signal(),
     }
-
-    # Planner prompt: decide search strategy
-    planner_prompt = """
-Analyze the target roles, keywords, and locations.
-Decide on a search strategy: which keyword combinations should we search?
-What search terms will yield high-signal relevant jobs?
-
-Avoid redundant searches. Prefer searches that combine role + keyword + location.
-"""
-
-    # Generator prompt: execute searches (mocked — Claude can't actually call web_search directly in this harness)
-    # Instead, we'll do actual web searches outside harness and feed results to Evaluator
-    generator_prompt = """
-Based on the Planner's search strategy, generate a list of search queries.
-Each query should combine role, keyword(s), and location.
-Format as JSON array of strings.
-"""
-
-    # Evaluator prompt: evaluate relevance of discovered jobs
-    evaluator_prompt = """
-You will receive discovered jobs from web search.
-For each job, score relevance (0–1) based on:
-  - Title match to target roles
-  - Keywords in job description
-  - Location preference
-  - Excluded keywords (hard reject if present)
-
-Provide explainable scoring with at least 3 reasons per job.
-Format: {jobs: [{...}], metadata: {...}}
-"""
 
     # For now, run a simpler flow: do web searches directly, then pass to evaluator
     logger.info("Executing job discovery flow...")
@@ -343,11 +303,15 @@ TARGET ROLES: {context['target_roles']}
 TARGET KEYWORDS: {context['target_keywords']}
 EXCLUDE KEYWORDS: {context['exclude_keywords']}
 LOCATIONS: {context['locations']}
+CONVERSION FEEDBACK SIGNAL: {json.dumps(context.get('feedback_signal', {}), ensure_ascii=False)}
 
 DISCOVERED JOBS:
 {jobs_str}
 
 TASK: Evaluate each job's relevance to the target profile.
+Use the conversion feedback signal to bias toward role/source/day patterns that convert better,
+but only when sample_size and confidence are strong. If confidence is low, explicitly down-weight
+the feedback and rely primarily on semantic match.
 
 For each job, assign:
 - relevance_score (0–1, where 1 = perfect match)

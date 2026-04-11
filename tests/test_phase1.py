@@ -6,9 +6,7 @@ Usage:
   python tests/test_phase1.py --dry-run
 """
 
-import json
 import logging
-import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -55,7 +53,8 @@ class TestHarness:
             name="test_harness",
             required_fields=["summary"],
         )
-        harness = PlannerGeneratorEvaluator(contract)
+        with patch("src.jobs.harness.ClaudeClient", return_value=MagicMock()):
+            harness = PlannerGeneratorEvaluator(contract)
         assert harness.contract.name == "test_harness"
         assert harness.total_tokens == 0
 
@@ -172,8 +171,7 @@ class TestGmailTriageV2:
 
     def test_get_unread_count_mock(self):
         """Test unread count with mock."""
-        from src.messaging.gmail_triage_v2 import get_unread_count
-
+        mock_service = MagicMock()
         mock_service.return_value.users.return_value.messages.return_value.list.return_value.execute.return_value = {
             "resultSizeEstimate": 5
         }
@@ -262,7 +260,6 @@ class TestConfigLoading:
     def test_job_search_config_loads(self):
         """Test job search config loads."""
         import yaml
-        from pathlib import Path
 
         config_path = REPO_ROOT / "config" / "job_search.yaml"
         assert config_path.exists()

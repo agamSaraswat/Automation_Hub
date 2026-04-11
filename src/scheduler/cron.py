@@ -59,8 +59,27 @@ def _run_job_pipeline() -> None:
         )
         send_message_sync(msg)
         logger.info("Job pipeline: %d discovered, %d tailored", new_count, tailored_count)
+        _run_outreach()
     except Exception as exc:
         logger.error("Job pipeline failed: %s", exc)
+
+
+def _run_outreach() -> None:
+    logger.info("⏰ Running outreach drafting pipeline...")
+    try:
+        from src.jobs.deduplicator import get_todays_queue
+        from src.outreach.pipeline import run_outreach_pipeline
+
+        queue = get_todays_queue(limit=25)
+        summary = run_outreach_pipeline(queue)
+        logger.info(
+            "Outreach drafted: warm=%d cold=%d skipped=%d",
+            summary.get("warm_intros_drafted", 0),
+            summary.get("cold_drafted", 0),
+            summary.get("skipped", 0),
+        )
+    except Exception as exc:
+        logger.error("Outreach pipeline failed: %s", exc)
 
 
 def _run_linkedin_generation() -> None:

@@ -10,6 +10,8 @@ from src.web.routers.gmail import router as gmail_router
 from src.web.routers.health import router as health_router
 from src.web.routers.jobs import router as jobs_router
 from src.web.routers.linkedin import router as linkedin_router
+from src.web.routers.network import router as network_router
+from src.web.routers.outreach import router as outreach_router
 from src.web.routers.runs import router as runs_router
 from src.web.routers.scheduler import router as scheduler_router
 from src.web.routers.settings import router as settings_router
@@ -38,6 +40,8 @@ app.include_router(jobs_router)
 app.include_router(briefing_router)
 app.include_router(gmail_router)
 app.include_router(linkedin_router)
+app.include_router(network_router)
+app.include_router(outreach_router)
 app.include_router(runs_router)
 app.include_router(scheduler_router)
 app.include_router(settings_router)

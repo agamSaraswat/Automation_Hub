@@ -157,3 +157,71 @@ export type ActivityItem = {
   action: string;
   result: string;
 };
+
+export type OutreachQueueItem = {
+  job_id?: number;
+  company: string;
+  role: string;
+  job_url: string;
+  classification: "warm_intro" | "cold" | string;
+};
+
+export type OutreachQueueResponse = {
+  items: OutreachQueueItem[];
+  count: number;
+};
+
+export type OutreachDraftItem = {
+  draft_id: string;
+  kind: string;
+  date: string;
+  filename: string;
+  path: string;
+  content: string;
+};
+
+export type OutreachDraftsResponse = {
+  items: OutreachDraftItem[];
+  count: number;
+};
+
+export type OutreachRunResponse = {
+  ok: boolean;
+  message?: string;
+  summary?: {
+    warm_intros_drafted: number;
+    cold_drafted: number;
+    skipped: number;
+    human_review_required: number;
+  };
+};
+
+export type NetworkNode = {
+  id: string;
+  name: string;
+  company: string;
+  role: string;
+  linkedin_url: string;
+  connection_strength: number;
+  last_contact_date: string;
+  mutual_connections: string[];
+  notes: string;
+};
+
+export type NetworkNodesResponse = {
+  items: NetworkNode[];
+  count: number;
+};
+
+export type NetworkPathResponse = {
+  company: string;
+  paths: NetworkNode[][];
+  count: number;
+};
+
+export type NetworkStatsResponse = {
+  connection_count: number;
+  edge_count: number;
+  avg_trust_score: number;
+  companies_reachable_via_warm_intro: string[];
+};
