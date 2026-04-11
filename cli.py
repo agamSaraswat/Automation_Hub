@@ -181,8 +181,8 @@ def cmd_jobs(dry_run: bool = False, action: str = "run"):
     result = run_jobs_pipeline()
 
     console.print(f"[green]✅ Pipeline complete[/green]\n")
-    console.print(f"  Discovered: {result.get('discovered_jobs', 0)} jobs")
-    console.print(f"  Queued: {result.get('queued_jobs', 0)} jobs")
+    console.print(f"  Discovered: {result.get('scraped_new_jobs', 0)} jobs")
+    console.print(f"  In queue today: {result.get('queue_size_today', 0)} jobs")
     console.print(f"  Tailored: {result.get('tailored_jobs', 0)} resumes")
 
     if result.get("errors"):
