@@ -1,426 +1,335 @@
-"""
-Enhanced Job Application Tracking with Response Analytics
+"""Application tracking + conversion feedback loop for Phase 2."""
 
-Extends deduplicator.py to track:
-  - Job status lifecycle (queued → applied → response → outcome)
-  - Response tracking (no response, rejection, interview, offer)
-  - Application metadata (resume used, cover letter, custom link)
-  - Analytics (response rate, time to response, success metrics)
+from __future__ import annotations
 
-Used by AKTIVIQ to:
-  - Track which jobs get responses (feedback for relevance scoring)
-  - Calculate success metrics per skill/profile
-  - Identify patterns in responses (by company, role, location)
-  - Report ROI: cost to discover vs. probability of response
-"""
-
-import json
 import logging
 import sqlite3
-from datetime import date, datetime, timedelta
+from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any
+
+import yaml
+
+from src.jobs.deduplicator import DB_PATH, add_job, init_db
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "jobs.db"
-
-# ── Enhanced schema with response tracking ──────────────────────────────
-
-CREATE_APPLICATIONS_TABLE = """
-CREATE TABLE IF NOT EXISTS applications (
-    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-    job_id                  INTEGER NOT NULL UNIQUE,
-    applied_at              TEXT NOT NULL,
-    applied_via             TEXT DEFAULT '',  -- direct, link, email, platform
-    tailored_resume_id      TEXT DEFAULT '',  -- reference to tailored resume
-    cover_letter_custom     BOOLEAN DEFAULT 0,
-    
-    -- Response tracking
-    first_response_at       TEXT DEFAULT NULL,
-    response_type           TEXT DEFAULT NULL,  -- no_response, rejection, interview, offer
-    response_source         TEXT DEFAULT NULL,  -- email, platform, phone, linkedin
-    response_text           TEXT DEFAULT '',
-    
-    -- Engagement metrics
-    email_opened            BOOLEAN DEFAULT 0,
-    email_opened_at         TEXT DEFAULT NULL,
-    interview_scheduled     BOOLEAN DEFAULT 0,
-    interview_date          TEXT DEFAULT NULL,
-    
-    -- Outcomes
-    offer_received          BOOLEAN DEFAULT 0,
-    offer_amount            TEXT DEFAULT NULL,  -- e.g., "150k-180k"
-    final_outcome           TEXT DEFAULT NULL,  -- rejected, withdrawn, accepted, pending
-    outcome_date            TEXT DEFAULT NULL,
-    
-    -- Notes
-    notes                   TEXT DEFAULT '',
-    
-    FOREIGN KEY (job_id) REFERENCES seen_jobs(id)
-);
-"""
-
-CREATE_APPLICATION_EVENTS_TABLE = """
-CREATE TABLE IF NOT EXISTS application_events (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    application_id      INTEGER NOT NULL,
-    event_type          TEXT NOT NULL,  -- applied, response_received, interview_scheduled, offer_received
-    event_data          TEXT NOT NULL,  -- JSON: { response_type, source, text, ... }
-    recorded_at         TEXT NOT NULL,
-    
-    FOREIGN KEY (application_id) REFERENCES applications(id)
-);
-"""
+CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "job_search.yaml"
+SUCCESS_RESPONSES = {"interview", "offer"}
+VALID_RESPONSES = {"interview", "rejection", "ghosted", "offer"}
 
 
-def init_tracking_db() -> None:
-    """Initialize enhanced tracking tables."""
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+def _parse_iso(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
+def _confidence_indicator(sample_size: int) -> str:
+    if sample_size >= 30:
+        return "high"
+    if sample_size >= 10:
+        return "medium"
+    return "low"
+
+
+def _role_type(title: str) -> str:
+    t = (title or "").lower()
+    if "scientist" in t:
+        return "data_science"
+    if "ml" in t or "machine learning" in t or "ai" in t:
+        return "ml_ai_engineering"
+    if "platform" in t:
+        return "platform"
+    if "analyst" in t:
+        return "analytics"
+    return "other"
+
+
+def _company_size(company: str) -> str:
+    c = (company or "").lower()
+    enterprise_markers = ("google", "amazon", "microsoft", "meta", "apple", "ibm", "oracle")
+    startup_markers = ("labs", "ai", "tech", "stealth", "startup")
+    if any(m in c for m in enterprise_markers):
+        return "enterprise"
+    if any(m in c for m in startup_markers):
+        return "startup"
+    return "unknown"
+
+
+def _get_or_create_job_id(company: str, title: str, url: str, channel: str) -> int:
+    init_db()
     conn = sqlite3.connect(str(DB_PATH))
-    
     try:
-        conn.execute(CREATE_APPLICATIONS_TABLE)
-        conn.execute(CREATE_APPLICATION_EVENTS_TABLE)
-        conn.commit()
-        logger.info("Application tracking database initialized")
-    except sqlite3.OperationalError as exc:
-        logger.warning(f"Tracking tables already exist: {exc}")
+        row = conn.execute("SELECT id FROM seen_jobs WHERE url = ?", (url,)).fetchone()
+        if row:
+            return int(row[0])
+    finally:
+        conn.close()
+
+    add_job(
+        url=url,
+        company=company,
+        title=title,
+        status="applied",
+        source=channel,
+    )
+
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        row = conn.execute("SELECT id FROM seen_jobs WHERE url = ?", (url,)).fetchone()
+        if not row:
+            raise ValueError(f"Unable to resolve job_id for URL: {url}")
+        return int(row[0])
     finally:
         conn.close()
 
 
-def apply_to_job(
-    job_id: int,
-    via: str = "direct",
-    tailored_resume_id: str = "",
-    cover_letter_custom: bool = False,
-) -> bool:
-    """
-    Record that we applied to a job.
-    
-    Args:
-        job_id: ID from seen_jobs table
-        via: "direct" (apply button), "link" (job link), "email", "platform"
-        tailored_resume_id: Reference to tailored resume used
-        cover_letter_custom: Whether custom cover letter was used
-        
-    Returns:
-        True if recorded, False if already applied
-    """
-    init_tracking_db()
+def record_application(
+    job_id: int | None,
+    company: str,
+    title: str,
+    url: str,
+    applied_at: str,
+    channel: str,
+) -> dict[str, Any]:
+    """Insert/update an application row in application_outcomes."""
+    if job_id is None:
+        job_id = _get_or_create_job_id(company, title, url, channel)
+
+    init_db()
     conn = sqlite3.connect(str(DB_PATH))
-    
     try:
-        # Check if already applied
-        existing = conn.execute(
-            "SELECT id FROM applications WHERE job_id = ?", (job_id,)
+        conn.execute(
+            """
+            INSERT INTO application_outcomes
+                (job_id, company, title, url, applied_at, channel)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(job_id) DO UPDATE SET
+                company=excluded.company,
+                title=excluded.title,
+                url=excluded.url,
+                applied_at=excluded.applied_at,
+                channel=excluded.channel
+            """,
+            (job_id, company, title, url, applied_at, channel),
+        )
+        conn.execute("UPDATE seen_jobs SET status = 'applied' WHERE id = ?", (job_id,))
+        conn.commit()
+        return {"ok": True, "job_id": job_id}
+    finally:
+        conn.close()
+
+
+def record_response(job_id: int, response_type: str, response_at: str) -> dict[str, Any]:
+    """Record response/outcome for an already-tracked application."""
+    response = response_type.strip().lower()
+    if response not in VALID_RESPONSES:
+        raise ValueError(f"Invalid response_type '{response_type}'. Use one of: {sorted(VALID_RESPONSES)}")
+
+    init_db()
+    conn = sqlite3.connect(str(DB_PATH))
+    try:
+        row = conn.execute(
+            "SELECT applied_at FROM application_outcomes WHERE job_id = ?",
+            (job_id,),
         ).fetchone()
-        
-        if existing:
-            logger.info(f"Job {job_id} already applied")
-            return False
-        
-        # Record application
-        conn.execute(
-            """
-            INSERT INTO applications (job_id, applied_at, applied_via, tailored_resume_id, cover_letter_custom)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (job_id, datetime.now().isoformat(), via, tailored_resume_id, cover_letter_custom),
-        )
-        
-        # Create event
-        conn.execute(
-            """
-            INSERT INTO application_events (application_id, event_type, event_data, recorded_at)
-            SELECT id, 'applied', ?, ? FROM applications WHERE job_id = ?
-            """,
-            (
-                json.dumps({"via": via, "resume": tailored_resume_id}),
-                datetime.now().isoformat(),
-                job_id,
-            ),
-        )
-        
-        conn.commit()
-        logger.info(f"Applied to job {job_id}")
-        return True
-        
-    except sqlite3.IntegrityError:
-        logger.warning(f"Job {job_id} duplicate application")
-        return False
-    finally:
-        conn.close()
+        if not row:
+            raise ValueError(f"No application record found for job_id={job_id}")
 
+        applied_at = row[0]
+        days_to_response = None
+        if applied_at:
+            days_to_response = (_parse_iso(response_at).date() - _parse_iso(applied_at).date()).days
 
-def record_response(
-    job_id: int,
-    response_type: str,
-    response_source: str,
-    response_text: str = "",
-) -> bool:
-    """
-    Record a response to an application.
-    
-    Args:
-        job_id: ID from seen_jobs table
-        response_type: "rejection", "interview", "offer", "no_response"
-        response_source: "email", "platform", "phone", "linkedin"
-        response_text: Full response text/summary
-        
-    Returns:
-        True if recorded
-    """
-    init_tracking_db()
-    conn = sqlite3.connect(str(DB_PATH))
-    
-    try:
         conn.execute(
             """
-            UPDATE applications 
-            SET first_response_at = ?, response_type = ?, response_source = ?, response_text = ?
+            UPDATE application_outcomes
+            SET response_type = ?, response_at = ?, days_to_response = ?
             WHERE job_id = ?
             """,
-            (datetime.now().isoformat(), response_type, response_source, response_text, job_id),
+            (response, response_at, days_to_response, job_id),
         )
-        
-        # Create event
-        app_id = conn.execute(
-            "SELECT id FROM applications WHERE job_id = ?", (job_id,)
-        ).fetchone()[0]
-        
-        conn.execute(
-            """
-            INSERT INTO application_events (application_id, event_type, event_data, recorded_at)
-            VALUES (?, 'response_received', ?, ?)
-            """,
-            (
-                app_id,
-                json.dumps({
-                    "response_type": response_type,
-                    "source": response_source,
-                    "text_length": len(response_text),
-                }),
-                datetime.now().isoformat(),
-            ),
-        )
-        
+
+        status = "tailored"
+        if response == "rejection":
+            status = "rejected"
+        elif response == "offer":
+            status = "applied"
+        elif response == "interview":
+            status = "applied"
+        elif response == "ghosted":
+            status = "applied"
+        conn.execute("UPDATE seen_jobs SET status = ? WHERE id = ?", (status, job_id))
         conn.commit()
-        logger.info(f"Recorded {response_type} for job {job_id}")
-        return True
-        
+        return {"ok": True, "job_id": job_id, "days_to_response": days_to_response}
+    finally:
+        conn.close()
+
+
+def _rate_bucket(rows: list[sqlite3.Row], key_name: str) -> list[dict[str, Any]]:
+    grouped: dict[str, list[sqlite3.Row]] = defaultdict(list)
+    for row in rows:
+        key = row[key_name] or "unknown"
+        grouped[key].append(row)
+
+    output = []
+    for key, group in grouped.items():
+        sample_size = len(group)
+        successes = sum(1 for r in group if (r["response_type"] or "") in SUCCESS_RESPONSES)
+        rate = successes / sample_size if sample_size else 0.0
+        output.append(
+            {
+                "segment": key,
+                "conversion_rate": round(rate, 4),
+                "sample_size": sample_size,
+                "confidence_indicator": _confidence_indicator(sample_size),
+            }
+        )
+    output.sort(key=lambda x: (x["conversion_rate"], x["sample_size"]), reverse=True)
+    return output
+
+
+def get_conversion_stats() -> dict[str, Any]:
+    """
+    Return conversion analytics with sample sizes + confidence indicators.
+    """
+    init_db()
+    conn = sqlite3.connect(str(DB_PATH))
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            """
+            SELECT
+                ao.job_id,
+                ao.company,
+                ao.title,
+                ao.channel,
+                ao.applied_at,
+                ao.response_type,
+                sj.location,
+                sj.source
+            FROM application_outcomes ao
+            LEFT JOIN seen_jobs sj ON sj.id = ao.job_id
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+
+    enriched = []
+    for row in rows:
+        payload = dict(row)
+        payload["company_size"] = _company_size(payload.get("company", ""))
+        payload["role_type"] = _role_type(payload.get("title", ""))
+        payload["source_channel"] = payload.get("channel") or payload.get("source") or "unknown"
+        try:
+            payload["application_day_of_week"] = _parse_iso(payload.get("applied_at", "")).strftime("%A")
+        except Exception:
+            payload["application_day_of_week"] = "unknown"
+        enriched.append(payload)
+
+    # convert back to row-like for re-use
+    class R(dict):
+        def __getitem__(self, item: str) -> Any:  # type: ignore[override]
+            return self.get(item)
+
+    wrapped = [R(r) for r in enriched]
+
+    return {
+        "total_applications": len(wrapped),
+        "company_size": _rate_bucket(wrapped, "company_size"),
+        "role_type": _rate_bucket(wrapped, "role_type"),
+        "location": _rate_bucket(wrapped, "location"),
+        "source_channel": _rate_bucket(wrapped, "source_channel"),
+        "application_day_of_week": _rate_bucket(wrapped, "application_day_of_week"),
+    }
+
+
+def get_feedback_signal() -> dict[str, Any]:
+    """Summarize what appears to be working based on conversion performance."""
+    stats = get_conversion_stats()
+
+    def top_segments(bucket: list[dict[str, Any]], top_n: int = 3) -> list[dict[str, Any]]:
+        return [b for b in bucket if b["sample_size"] > 0][:top_n]
+
+    role_top = top_segments(stats.get("role_type", []), 3)
+    source_top = top_segments(stats.get("source_channel", []), 3)
+    day_top = top_segments(stats.get("application_day_of_week", []), 1)
+
+    return {
+        "top_converting_role_types": role_top,
+        "top_converting_sources": source_top,
+        "best_day_to_apply": day_top[0] if day_top else None,
+        "stats_snapshot": stats,
+    }
+
+
+def adjust_relevance_weights(evaluator_config: dict[str, Any]) -> dict[str, Any]:
+    """
+    Adjust evaluator weights in-memory and in config/job_search.yaml using feedback data.
+    """
+    feedback = get_feedback_signal()
+    stats = feedback.get("stats_snapshot", {})
+
+    base = evaluator_config.get("weights", {})
+    updated = {
+        "title_match": float(base.get("title_match", 0.35)),
+        "keyword_match": float(base.get("keyword_match", 0.35)),
+        "location_match": float(base.get("location_match", 0.15)),
+        "source_channel": float(base.get("source_channel", 0.15)),
+    }
+
+    top_sources = feedback.get("top_converting_sources", [])
+    if top_sources and top_sources[0]["confidence_indicator"] in {"medium", "high"}:
+        updated["source_channel"] = min(updated["source_channel"] + 0.05, 0.35)
+        updated["keyword_match"] = max(updated["keyword_match"] - 0.03, 0.2)
+        updated["location_match"] = max(updated["location_match"] - 0.02, 0.1)
+
+    total = sum(updated.values()) or 1.0
+    normalized = {k: round(v / total, 4) for k, v in updated.items()}
+    evaluator_config["weights"] = normalized
+    evaluator_config["feedback_last_updated"] = datetime.now().isoformat()
+    evaluator_config["feedback_sample_size"] = stats.get("total_applications", 0)
+
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+        discovery = cfg.setdefault("job_discovery", {})
+        evaluator_section = discovery.setdefault("evaluator", {})
+        evaluator_section["weights"] = normalized
+        evaluator_section["feedback_sample_size"] = stats.get("total_applications", 0)
+        evaluator_section["feedback_confidence"] = _confidence_indicator(stats.get("total_applications", 0))
+        evaluator_section["top_sources"] = [
+            {
+                "segment": s["segment"],
+                "conversion_rate": s["conversion_rate"],
+                "sample_size": s["sample_size"],
+                "confidence_indicator": s["confidence_indicator"],
+            }
+            for s in top_sources[:3]
+        ]
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            yaml.safe_dump(cfg, f, sort_keys=False)
     except Exception as exc:
-        logger.error(f"Error recording response: {exc}")
-        return False
-    finally:
-        conn.close()
+        logger.warning("Unable to persist evaluator feedback weights: %s", exc)
+
+    return evaluator_config
 
 
-def get_applications_summary() -> dict:
-    """
-    Get comprehensive application summary with analytics.
-    
-    Returns dict with:
-      - total_applications
-      - by_response_type
-      - response_rate (%)
-      - avg_time_to_response (days)
-      - success_rate (interviews + offers)
-    """
-    init_tracking_db()
+def find_latest_job_id_for_company(company: str) -> int | None:
+    """Resolve latest tracked application for a company."""
+    init_db()
     conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    
     try:
-        # Total applications
-        total = conn.execute(
-            "SELECT COUNT(*) FROM applications"
-        ).fetchone()[0]
-        
-        if total == 0:
-            return {
-                "total_applications": 0,
-                "by_response_type": {},
-                "response_rate": 0.0,
-                "avg_time_to_response_days": 0,
-                "success_rate": 0.0,
-            }
-        
-        # By response type
-        by_type = {}
-        for row in conn.execute(
-            "SELECT response_type, COUNT(*) FROM applications GROUP BY response_type"
-        ).fetchall():
-            by_type[row[0] or "pending"] = row[1]
-        
-        # Response rate
-        responded = conn.execute(
-            "SELECT COUNT(*) FROM applications WHERE response_type IS NOT NULL"
-        ).fetchone()[0]
-        response_rate = (responded / total) * 100 if total > 0 else 0.0
-        
-        # Time to response (avg)
-        time_rows = conn.execute(
+        row = conn.execute(
             """
-            SELECT AVG(julianday(first_response_at) - julianday(applied_at))
-            FROM applications
-            WHERE first_response_at IS NOT NULL
-            """
+            SELECT job_id
+            FROM application_outcomes
+            WHERE lower(company) = lower(?)
+            ORDER BY applied_at DESC
+            LIMIT 1
+            """,
+            (company,),
         ).fetchone()
-        avg_time = time_rows[0] if time_rows[0] else 0
-        
-        # Success rate (interviews + offers)
-        successes = conn.execute(
-            "SELECT COUNT(*) FROM applications WHERE response_type IN ('interview', 'offer')"
-        ).fetchone()[0]
-        success_rate = (successes / total) * 100 if total > 0 else 0.0
-        
-        return {
-            "total_applications": total,
-            "by_response_type": by_type,
-            "response_rate": round(response_rate, 2),
-            "avg_time_to_response_days": round(avg_time, 1) if avg_time else 0,
-            "success_rate": round(success_rate, 2),
-        }
-        
+        return int(row[0]) if row else None
     finally:
         conn.close()
-
-
-def get_applications_by_status(status: str = "pending", limit: int = 20) -> list[dict]:
-    """
-    Get applications filtered by response status.
-    
-    Args:
-        status: "pending" (no response), "responded", "interview", "offer", "rejected"
-        limit: Max results
-        
-    Returns:
-        List of application records
-    """
-    init_tracking_db()
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    
-    try:
-        if status == "pending":
-            query = """
-            SELECT a.*, j.company, j.title, j.url
-            FROM applications a
-            JOIN seen_jobs j ON a.job_id = j.id
-            WHERE a.response_type IS NULL
-            ORDER BY a.applied_at DESC
-            LIMIT ?
-            """
-            rows = conn.execute(query, (limit,)).fetchall()
-        elif status == "responded":
-            query = """
-            SELECT a.*, j.company, j.title, j.url
-            FROM applications a
-            JOIN seen_jobs j ON a.job_id = j.id
-            WHERE a.response_type IS NOT NULL
-            ORDER BY a.first_response_at DESC
-            LIMIT ?
-            """
-            rows = conn.execute(query, (limit,)).fetchall()
-        elif status in ("interview", "offer", "rejected"):
-            query = """
-            SELECT a.*, j.company, j.title, j.url
-            FROM applications a
-            JOIN seen_jobs j ON a.job_id = j.id
-            WHERE a.response_type = ?
-            ORDER BY a.first_response_at DESC
-            LIMIT ?
-            """
-            rows = conn.execute(query, (status, limit)).fetchall()
-        else:
-            return []
-        
-        return [dict(r) for r in rows]
-        
-    finally:
-        conn.close()
-
-
-def get_roi_analysis() -> dict:
-    """
-    Calculate ROI: cost to discover/tailor vs. probability of response.
-    
-    Returns dict with:
-      - total_cost_usd (discovery + tailoring)
-      - total_applications
-      - applications_per_dollar
-      - responses_per_dollar
-      - cost_per_response_usd
-      - cost_per_interview_usd
-      - estimated_cost_to_offer_usd
-    """
-    init_tracking_db()
-    conn = sqlite3.connect(str(DB_PATH))
-    
-    try:
-        # Get application stats
-        total_apps = conn.execute("SELECT COUNT(*) FROM applications").fetchone()[0]
-        responded = conn.execute(
-            "SELECT COUNT(*) FROM applications WHERE response_type IS NOT NULL"
-        ).fetchone()[0]
-        interviews = conn.execute(
-            "SELECT COUNT(*) FROM applications WHERE response_type IN ('interview', 'offer')"
-        ).fetchone()[0]
-        
-        if total_apps == 0:
-            return {
-                "total_cost_usd": 0.0,
-                "total_applications": 0,
-                "applications_per_dollar": 0.0,
-                "responses_per_dollar": 0.0,
-                "cost_per_response_usd": 0.0,
-                "cost_per_interview_usd": 0.0,
-                "estimated_cost_to_offer_usd": 0.0,
-            }
-        
-        # Estimated cost: $0.30/run (discovery+tailoring) = ~0.15/job
-        # This is rough; actual cost depends on token usage
-        total_cost = total_apps * 0.15
-        
-        return {
-            "total_cost_usd": round(total_cost, 2),
-            "total_applications": total_apps,
-            "applications_per_dollar": round(total_apps / (total_cost or 1), 2),
-            "responses_per_dollar": round(responded / (total_cost or 1), 2),
-            "cost_per_response_usd": round(total_cost / (responded or 1), 2),
-            "cost_per_interview_usd": round(total_cost / (interviews or 1), 2),
-            "estimated_cost_to_offer_usd": round(total_cost / (max(interviews, 1) or 1) * 3, 2),  # Rough: 1 offer per 3 interviews
-        }
-        
-    finally:
-        conn.close()
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    
-    init_tracking_db()
-    
-    # Example: Record an application
-    apply_to_job(job_id=1, via="direct", tailored_resume_id="anthropic_tailored.md")
-    
-    # Example: Record a response
-    record_response(
-        job_id=1,
-        response_type="interview",
-        response_source="email",
-        response_text="Thank you for your interest. We'd like to schedule an interview...",
-    )
-    
-    # Show summary
-    print("=== Application Summary ===")
-    print(json.dumps(get_applications_summary(), indent=2))
-    
-    print("\n=== ROI Analysis ===")
-    print(json.dumps(get_roi_analysis(), indent=2))
-    
-    print("\n=== Pending Applications ===")
-    pending = get_applications_by_status("pending")
-    print(f"Waiting on responses from {len(pending)} companies")

@@ -7,7 +7,7 @@ Status values: 'seen', 'queued', 'tailored', 'applied', 'rejected'
 
 import sqlite3
 import logging
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 from typing import Optional
 
@@ -29,12 +29,28 @@ CREATE TABLE IF NOT EXISTS seen_jobs (
 );
 """
 
+CREATE_APPLICATION_OUTCOMES_SQL = """
+CREATE TABLE IF NOT EXISTS application_outcomes (
+    job_id               INTEGER PRIMARY KEY,
+    company              TEXT NOT NULL,
+    title                TEXT NOT NULL,
+    url                  TEXT NOT NULL,
+    applied_at           TEXT NOT NULL,
+    channel              TEXT NOT NULL,
+    response_type        TEXT DEFAULT NULL,
+    response_at          TEXT DEFAULT NULL,
+    days_to_response     INTEGER DEFAULT NULL,
+    FOREIGN KEY (job_id) REFERENCES seen_jobs(id)
+);
+"""
+
 
 def init_db() -> None:
     """Create the database and table if they don't exist."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH))
     conn.execute(CREATE_TABLE_SQL)
+    conn.execute(CREATE_APPLICATION_OUTCOMES_SQL)
     conn.commit()
     conn.close()
     logger.info("Jobs database initialised at %s", DB_PATH)

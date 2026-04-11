@@ -8,6 +8,9 @@ Usage:
   python run.py --jobs        # Run job discovery + tailoring pipeline
   python run.py --linkedin    # Generate + interactively review LinkedIn post
   python run.py --gmail       # Run Gmail triage
+  python run.py --outreach    # Draft outreach for today's queue (human review required)
+  python run.py --applied "Company, Role, URL"      # Record application
+  python run.py --response "Company, response_type"  # Record response outcome
   python run.py --telegram    # Start Telegram bot (blocking)
   python run.py --schedule    # Start full APScheduler daemon (blocking)
   python run.py --setup       # First-time setup wizard — writes .env
@@ -227,6 +230,70 @@ def cmd_gmail() -> None:
     console.print()
 
 
+# ── --outreach ────────────────────────────────────────────
+
+def cmd_outreach(force_cold: bool = False) -> None:
+    """Run outreach drafting pipeline (draft-only, never auto-sends)."""
+    from src.jobs.deduplicator import get_todays_queue
+    from src.outreach.pipeline import run_outreach_pipeline
+
+    os.environ["OUTREACH_FORCE_COLD"] = "1" if force_cold else "0"
+    queue = get_todays_queue(limit=25)
+    result = run_outreach_pipeline(queue)
+
+    console.print("\n[bold]📬 Outreach drafting complete[/bold]\n")
+    console.print(f"  Warm intros drafted : [green]{result.get('warm_intros_drafted', 0)}[/green]")
+    console.print(f"  Cold drafts         : [yellow]{result.get('cold_drafted', 0)}[/yellow]")
+    console.print(f"  Skipped             : {result.get('skipped', 0)}")
+    console.print(f"  Human review needed : [bold]{result.get('human_review_required', 0)}[/bold]\n")
+
+
+# ── --applied / --response ──────────────────────────────
+
+def cmd_applied(payload: str) -> None:
+    """Record a manual application event from CLI."""
+    from src.jobs.application_tracker import record_application
+
+    parts = [p.strip() for p in payload.split(",")]
+    if len(parts) < 3:
+        raise ValueError('Expected format: --applied "Company, Role, URL"')
+
+    company, role, url = parts[0], parts[1], parts[2]
+    result = record_application(
+        job_id=None,
+        company=company,
+        title=role,
+        url=url,
+        applied_at=datetime.now().isoformat(),
+        channel="manual_cli",
+    )
+    console.print(f"\n[green]✅ Recorded application[/green] job_id={result['job_id']} ({company} — {role})\n")
+
+
+def cmd_response(payload: str) -> None:
+    """Record a manual response outcome from CLI."""
+    from src.jobs.application_tracker import find_latest_job_id_for_company, record_response
+
+    parts = [p.strip() for p in payload.split(",")]
+    if len(parts) < 2:
+        raise ValueError('Expected format: --response "Company, response_type"')
+
+    company, response_type = parts[0], parts[1].lower()
+    job_id = find_latest_job_id_for_company(company)
+    if job_id is None:
+        raise ValueError(f"No tracked application found for company: {company}")
+
+    result = record_response(
+        job_id=job_id,
+        response_type=response_type,
+        response_at=datetime.now().isoformat(),
+    )
+    console.print(
+        f"\n[green]✅ Recorded response[/green] job_id={result['job_id']} "
+        f"type={response_type} days_to_response={result['days_to_response']}\n"
+    )
+
+
 # ── --telegram ────────────────────────────────────────────
 
 def cmd_telegram() -> None:
@@ -379,6 +446,9 @@ Commands:
   --jobs        Job discovery + resume tailoring
   --linkedin    Generate + review LinkedIn post
   --gmail       Gmail triage
+  --outreach    Draft outreach for today's queue
+  --applied     Record a job application ("Company, Role, URL")
+  --response    Record an application response ("Company, response_type")
   --telegram    Start Telegram bot
   --schedule    Start full scheduler
         """,
@@ -390,18 +460,28 @@ Commands:
     g.add_argument("--jobs",     action="store_true", help="Job discovery + tailoring")
     g.add_argument("--linkedin", action="store_true", help="Generate + review LinkedIn post")
     g.add_argument("--gmail",    action="store_true", help="Run Gmail triage")
+    g.add_argument("--outreach", action="store_true", help="Draft outreach from today's queue")
+    g.add_argument("--applied",  type=str, help='Record application: "Company, Role, URL"')
+    g.add_argument("--response", type=str, help='Record response: "Company, response_type"')
     g.add_argument("--telegram", action="store_true", help="Start Telegram bot")
     g.add_argument("--schedule", action="store_true", help="Start full scheduler")
+    parser.add_argument("--force-cold", action="store_true", help="Allow cold outreach drafting when no warm path")
 
     args = parser.parse_args()
     _setup_logging()
 
-    # --setup and --status don't need ANTHROPIC_API_KEY
+    # --setup, --status, --applied, and --response don't need ANTHROPIC_API_KEY
     if args.setup:
         cmd_setup()
         return
     if args.status:
         cmd_status()
+        return
+    if args.applied:
+        cmd_applied(args.applied)
+        return
+    if args.response:
+        cmd_response(args.response)
         return
 
     if not _validate_env():
@@ -415,6 +495,8 @@ Commands:
         cmd_linkedin()
     elif args.gmail:
         cmd_gmail()
+    elif args.outreach:
+        cmd_outreach(force_cold=args.force_cold)
     elif args.telegram:
         cmd_telegram()
     elif args.schedule:

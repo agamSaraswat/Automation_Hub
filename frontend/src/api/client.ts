@@ -11,6 +11,12 @@ import {
   LinkedInDraft,
   LinkedInPublishResponse,
   LinkedInStatus,
+  NetworkNodesResponse,
+  NetworkPathResponse,
+  NetworkStatsResponse,
+  OutreachDraftsResponse,
+  OutreachQueueResponse,
+  OutreachRunResponse,
   RunsHistoryResponse,
   SchedulerStatus,
   SystemStatus,
@@ -80,6 +86,23 @@ export const apiClient = {
     fetchJson("/api/scheduler/start", { method: "POST", body: JSON.stringify({ confirm_action: confirmAction }) }),
   stopScheduler: (confirmAction: boolean): Promise<SchedulerStatus> =>
     fetchJson("/api/scheduler/stop", { method: "POST", body: JSON.stringify({ confirm_action: confirmAction }) }),
+  getOutreachQueue: (): Promise<OutreachQueueResponse> => fetchJson("/api/outreach/queue"),
+  runOutreach: (confirmAction: boolean): Promise<OutreachRunResponse> =>
+    fetchJson("/api/outreach/run", { method: "POST", body: JSON.stringify({ confirm_action: confirmAction }) }),
+  getOutreachDrafts: (): Promise<OutreachDraftsResponse> => fetchJson("/api/outreach/drafts"),
+  approveOutreachDraft: (draftId: string, confirmAction: boolean): Promise<{ ok: boolean; message?: string }> =>
+    fetchJson(`/api/outreach/approve/${draftId}`, { method: "POST", body: JSON.stringify({ confirm_action: confirmAction }) }),
+  rejectOutreachDraft: (draftId: string, reason: string, confirmAction: boolean): Promise<{ ok: boolean; message?: string }> =>
+    fetchJson(`/api/outreach/reject/${draftId}`, {
+      method: "POST",
+      body: JSON.stringify({ confirm_action: confirmAction, reason }),
+    }),
+  getNetworkNodes: (): Promise<NetworkNodesResponse> => fetchJson("/api/network/nodes"),
+  addNetworkNode: (payload: Record<string, unknown>): Promise<{ ok: boolean; node_id: string }> =>
+    fetchJson("/api/network/nodes", { method: "POST", body: JSON.stringify(payload) }),
+  findNetworkPath: (company: string): Promise<NetworkPathResponse> =>
+    fetchJson(`/api/network/path/${encodeURIComponent(company)}`),
+  getNetworkStats: (): Promise<NetworkStatsResponse> => fetchJson("/api/network/stats"),
 };
 
 export { API_BASE_URL };

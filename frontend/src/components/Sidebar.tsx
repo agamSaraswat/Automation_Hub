@@ -8,6 +8,8 @@ type SidebarProps = {
 const NAV_ITEMS: Array<{ key: PageKey; label: string }> = [
   { key: "dashboard", label: "Dashboard" },
   { key: "jobs", label: "Jobs" },
+  { key: "outreach", label: "Outreach" },
+  { key: "network", label: "Network" },
   { key: "linkedin", label: "LinkedIn" },
   { key: "gmail", label: "Gmail" },
   { key: "settings", label: "Settings" },

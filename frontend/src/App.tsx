@@ -7,6 +7,8 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { GmailPage } from "./pages/GmailPage";
 import { JobsPage } from "./pages/JobsPage";
 import { LinkedInPage } from "./pages/LinkedInPage";
+import { NetworkPage } from "./pages/Network";
+import { OutreachPage } from "./pages/Outreach";
 import { PageKey } from "./pages/pageTypes";
 import { RunsLogsPage } from "./pages/RunsLogsPage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -33,6 +35,12 @@ export default function App() {
     }
     if (page === "jobs") {
       return <JobsPage onAddActivity={addActivity} />;
+    }
+    if (page === "outreach") {
+      return <OutreachPage />;
+    }
+    if (page === "network") {
+      return <NetworkPage />;
     }
     if (page === "linkedin") {
       return <LinkedInPage />;

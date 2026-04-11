@@ -23,20 +23,37 @@ class ServicesAutomationTests(unittest.TestCase):
             self.assertTrue(status["queue_file_exists"])
             self.assertFalse(status["posted_file_exists"])
 
-    @patch("src.jobs.scraper.run_scraper", return_value=3)
-    @patch("src.jobs.tailoring_engine.run_tailoring", return_value=2)
+    @patch("src.jobs.claude_resume_tailoring.save_tailored_resume")
+    @patch(
+        "src.jobs.claude_resume_tailoring.tailor_resume_for_job",
+        return_value={"job_id": "job-1", "tailored_resume": "resume"},
+    )
+    @patch("src.jobs.claude_job_discovery.queue_discovered_jobs", return_value=2)
+    @patch(
+        "src.jobs.claude_job_discovery.run_job_discovery",
+        return_value={
+            "jobs": [
+                {"unique_id": "job-1", "title": "Role 1", "jd_snippet": "desc"},
+                {"unique_id": "job-2", "title": "Role 2", "jd_snippet": "desc"},
+            ],
+            "run_metadata": {"tokens_used": 100, "after_dedup": 2},
+        },
+    )
     @patch("src.jobs.deduplicator.get_todays_queue", return_value=[{"id": 1}, {"id": 2}])
     @patch("src.jobs.deduplicator.get_stats", return_value={"total_jobs": 10, "today_queued": 2, "by_status": {"queued": 2}})
     def test_run_jobs_pipeline_returns_structured_output(
         self,
         mock_stats,
         mock_queue,
-        mock_tailoring,
-        mock_scraper,
+        mock_run_discovery,
+        mock_queue_discovered,
+        mock_tailor,
+        mock_save_tailored,
     ):
-        result = automation.run_jobs_pipeline()
+        with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test-key"}, clear=False):
+            result = automation.run_jobs_pipeline()
 
-        self.assertEqual(result["scraped_new_jobs"], 3)
+        self.assertEqual(result["scraped_new_jobs"], 2)
         self.assertEqual(result["tailored_jobs"], 2)
         self.assertEqual(result["queue_size_today"], 2)
         self.assertIn("stats", result)
@@ -51,7 +68,16 @@ class ServicesAutomationTests(unittest.TestCase):
         self.assertTrue(result["sent_to_telegram"])
         mock_send.assert_called_once_with("hello")
 
-    @patch("src.messaging.gmail_triage.run_triage", return_value="summary")
+    @patch(
+        "src.messaging.gmail_triage_v2.run_triage_v2",
+        return_value={
+            "summary_text": "summary",
+            "classified_json": "[]",
+            "decision_needed": False,
+            "urgent_count": 0,
+            "normal_count": 0,
+        },
+    )
     @patch("src.messaging.telegram_bot.send_message_sync")
     def test_run_gmail_triage_now_can_skip_telegram(self, mock_send, mock_triage):
         result = automation.run_gmail_triage_now(send_to_telegram=False)
