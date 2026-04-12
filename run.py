@@ -64,9 +64,13 @@ def _setup_logging() -> None:
 
 # ── environment validation ────────────────────────────────
 
-REQUIRED_VARS: dict[str, str] = {
-    "ANTHROPIC_API_KEY": "Required for Claude AI — console.anthropic.com",
+_PROVIDER_KEY_MAP: dict[str, tuple[str, str]] = {
+    "anthropic":  ("ANTHROPIC_API_KEY",  "Required for Claude AI — console.anthropic.com"),
+    "gemini":     ("GEMINI_API_KEY",     "Required for Gemini AI — aistudio.google.com"),
+    "groq":       ("GROQ_API_KEY",       "Required for Groq — console.groq.com"),
+    "openrouter": ("OPENROUTER_API_KEY", "Required for OpenRouter — openrouter.ai/keys"),
 }
+
 OPTIONAL_VARS: dict[str, str] = {
     "LINKEDIN_ACCESS_TOKEN": "LinkedIn API token — developers.linkedin.com",
     "LINKEDIN_PERSON_URN":   "Your LinkedIn URN (urn:li:person:XXXXX)",
@@ -77,11 +81,14 @@ OPTIONAL_VARS: dict[str, str] = {
 
 
 def _validate_env() -> bool:
-    missing = [v for v in REQUIRED_VARS if not os.getenv(v)]
-    if missing:
-        console.print("\n[bold red]Missing required environment variables:[/bold red]")
-        for v in missing:
-            console.print(f"  • {v}: {REQUIRED_VARS[v]}")
+    provider = (os.getenv("ACTIVE_PROVIDER") or "anthropic").lower()
+    var_name, description = _PROVIDER_KEY_MAP.get(
+        provider,
+        _PROVIDER_KEY_MAP["anthropic"],
+    )
+    if not os.getenv(var_name):
+        console.print("\n[bold red]Missing required environment variable:[/bold red]")
+        console.print(f"  • {var_name}: {description}")
         console.print("\nRun [bold]python run.py --setup[/bold] for guided setup.\n")
         return False
     return True
